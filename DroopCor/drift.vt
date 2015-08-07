@@ -1,0 +1,80 @@
+`timescale 1 ns/ 1 ps
+`define ONE
+
+module drift_vlg_tst();
+
+   reg [13:0] adc;
+   reg rst_n;
+   reg pause;
+   reg rescale;
+   reg [13:0] center_val;
+   reg [8:0] rdaddr;
+   reg [8:0] rdaddr1;
+   reg clk;
+   
+   wire [13:0] out_ram;
+   wire [13:0] adc_val;
+   
+`ifdef ONE  
+ 
+  
+  drift i1 (
+       // port map - connection between master ports and signals/registers   
+	    .adc(adc),
+	    .center_val(center_val),
+	    .rst_n(rst_n),
+	    .pause(pause),
+	    .rescale(rescale),
+	    .q_b(out_ram),
+	    .rdaddr(rdaddr),
+	    .clk(clk)
+	    );
+   
+   test_rom_example i2 (
+			.rdaddr(rdaddr1),
+			.adc_val(adc_val)
+			);
+  
+    // Clock generator
+   localparam PERIOD = 50.0;
+   always #(PERIOD/2) clk = ~ clk;
+ 
+   always @(posedge clk)
+     begin
+	if (rdaddr1 == 9'b111111111)
+	  rdaddr1 <= 9'b0;
+	else
+	  begin
+	     rdaddr1 <= rdaddr1 +1'b1;
+	     adc <= adc_val;
+	     adc <= 14'd4775;
+	     
+	  end
+     end // always @ (posedge clk)
+
+
+   
+   initial                                                
+     begin      
+
+	center_val = 14'd4780;  
+        rdaddr = 9'd255;
+	rdaddr1 = 9'd0;
+	clk = 1'b0;
+	pause = 1'b0;
+	rescale = 1'b1;
+	rst_n = 1'b0;
+	#(5*PERIOD) rst_n = 1'b1;
+	#(512*PERIOD) 
+	#(512*PERIOD) pause = 1'b1;
+	#(5*PERIOD) assign rdaddr = rdaddr1;
+	
+//	#(1*PERIOD) rdaddr = 9'b100000000;
+     end             
+   
+`endif  
+                                       
+endmodule
+
+
+
