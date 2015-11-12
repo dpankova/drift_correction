@@ -7,11 +7,15 @@ module drift_vlg_tst();
    reg rst_n; 
    reg pause;
    reg rescale;
+   reg read_fin;
    reg [13:0] center_val;
    reg [4:0] rdaddr;
    reg [17:0] rdaddr1;
    reg clk;
    reg [1:0] switch;
+   wire [19:0] count_in_out;
+   wire [4:0]  addr_count_in;
+ 
    wire      filled;
    wire [19:0] out_ram;
    wire [13:0] adc_val;
@@ -26,10 +30,13 @@ module drift_vlg_tst();
 	    .rst_n(rst_n),
 	    .pause(pause),
 	    .rescale(rescale),
+	    .read_fin(read_fin),
 	    .q_a(out_ram),
 	    .rdaddr(rdaddr),
 	    .clk(clk),
-	    .filled(filled)
+	    .filled(filled),
+	    .count_in_out(count_in_out),
+	    .addr_count_in(addr_count_in)
 	    );
    
    test_rom_example i2 (
@@ -75,8 +82,9 @@ module drift_vlg_tst();
 	       begin
 	     	  adc <= 14'd4776;
 	       end*/
+	     adc <= 14'd4775;
 	     
-	     adc <= adc_val;
+	    // adc <= adc_val;
         /*     else if (switch == 2'b01)
 	       begin
 		  adc <= 14'd4777;
@@ -117,9 +125,10 @@ module drift_vlg_tst();
 	#(5*PERIOD) rst_n = 1'b1;
 	
 	#(32*PERIOD)  rdaddr1 <= 18'b0; 
-	#(260003*PERIOD) pause = 1'b1;
-	#(5*PERIOD) rdaddr1 <= 18'b0; 
-	assign rdaddr = rdaddr1[4:0];
+	#(5*PERIOD) pause = 1'b1;
+	#(4*PERIOD) pause = 1'b0;
+/*	#(5*PERIOD) rdaddr1 <= 18'b0; 
+	assign rdaddr = rdaddr1[4:0];*/
 //515	
 //	#(1*PERIOD) rdaddr = 9'b100000000;
      end             

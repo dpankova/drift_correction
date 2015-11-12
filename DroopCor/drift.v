@@ -14,44 +14,50 @@ module drift
    input 	 rst_n, // reset
    input 	 pause, // pause histogramm data taking and processor read out
    input 	 rescale, // enable rescaling if histogramm is full
+   input 	 read_fin, // processor signals it finished reading out hist 
    input [4:0] 	 rdaddr, // readout adress
    input [13:0]  center_val, // input histogram central value
    input [13:0]  adc, // data input from ADC
    output [19:0] q_a, // readout data
+   output [19:0] count_in_out,
+   output [4:0]  addr_count_in, 
    output 	 filled // RAM is full flag
    );
    
    // variables
    reg 		 wren_a; // write enable chanel A
    wire 	 wren_b; // write enable chanel B
-   reg [13:0] 	     old_center_val;  // to keep track if central value has changed
-   reg [19:0] 	     data_a; // port A data
-   reg [19:0] 	     data_b; // port B data
-   reg [19:0] 	     count_in; //counter for repeated address hits
-   reg [19:0] 	     pipe_count; //pipeline  counter 
-   wire [19:0] 	     q_b;   // RAM output B
-   reg [4:0] 	     addr_a; // RAM address input port A
-   reg [4:0] 	     addr_b; // RAM address input port B
-   reg [4:0] 	     addr; // first pipeline stage, address calculated from ADC
-   reg [4:0] 	     addr_1; // second pipeline stage
-   reg [4:0] 	     addr_2; // third pipeline stage
-   reg [4:0] 	     addr_3; // forth pipeline stage
-   reg [4:0] 	     addr_mem_1; // variable for remembering the repeated address
-   reg [4:0] 	     addr_mem_2;
-   reg [4:0] 	     addr_mem_3;
-   reg [4:0] 	     addr_mem_4;
-   reg [4:0] 	     addr_mem_5;
-   reg [4:0] 	     addr_mem_6;
-   reg [5:0] 	     counter; // state machine counter
-   reg 		     remove_1; // varible is high if repeated address needs to be removed
-   reg 		     remove_2;
-   reg 		     remove_3;
-   reg 		     remove_4;
-   reg 		     remove_5;
-   reg 		     remove_6;
-
-  // RAM initialization (two port)
-  ram	ram_inst (
+   reg [13:0] 	 old_center_val;  // to keep track if central value has changed
+   reg [19:0] 	 data_a; // port A data
+   reg [19:0] 	 data_b; // port B data
+   reg [19:0] 	 count_in; //counter for repeated address hits
+   reg [19:0] 	 pipe_count; //pipeline  counter 
+   wire [19:0] 	 q_b;   // RAM output B
+   wire 	 filled_bin;
+   reg 		 filled_ram;		
+   reg [4:0] 	 addr_a; // RAM address input port A
+   reg [4:0] 	 addr_b; // RAM address input port B
+   reg [4:0] 	 addr; // first pipeline stage, address calculated from ADC
+   reg [4:0] 	 addr_1; // second pipeline stage
+   reg [4:0] 	 addr_2; // third pipeline stage
+   reg [4:0] 	 addr_3; // forth pipeline stage
+   reg [4:0] 	 addr_mem; // remember the address for thr output
+   reg [4:0] 	 addr_mem_1; // variable for remembering the repeated address
+   reg [4:0] 	 addr_mem_2;
+   reg [4:0] 	 addr_mem_3;
+   reg [4:0] 	 addr_mem_4;
+   reg [4:0] 	 addr_mem_5;
+   reg [4:0] 	 addr_mem_6;
+   reg [5:0] 	 counter; // state machine counter
+   reg 		 remove_1; // varible is high if repeated address needs to be removed
+   reg 		 remove_2;
+   reg 		 remove_3;
+   reg 		 remove_4;
+   reg 		 remove_5;
+   reg 		 remove_6;
+   
+   // RAM initialization (two port)
+   ram	ram_inst (
 	.address_a ( addr_a ),
 	.address_b ( addr_b ),
 	.clock ( clk ),
@@ -125,17 +131,20 @@ module drift
 	   
 	   S_RUN: //normal running sate
 	     begin
+		if (filled_bin) filled_ram <= 1'b1;
+		
 		if ((rescale) && (q_b == L_RAM_DEPTH-1)) // RAM is full - rescale
 		  fsm <= S_RESCALE;
 		else if (old_center_val != center_val) // New central value - inititialize
 		  fsm <= S_INIT_RAM;
-		else if (pause) // Pause signal 
+		else if (pause || filled_bin) // Pause signal or hist is filled go tp pause state 
 		  fsm<= S_PAUSE;
 		else
 		  fsm <= S_RUN;
 		
 		//PIPELINE START
-		pipe_count <= pipe_count + 1'b1; //pipeline counter
+		if (pipe_count < 4'd5)
+		  pipe_count <= pipe_count + 1'b1; //pipeline counter
 		addr_3 <= addr_2;
 		addr_2 <= addr_1;
 		addr_1 <= addr;
@@ -173,10 +182,11 @@ module drift
 			  wren_a <= 1'b0;
 			  remove_6 <= 1'b0;
 		       end
-		     else if ((addr_3 == addr_2) &&  (count_in != 20'd524288)) // if two sequential 
+		     else if (addr_3 == addr_2) // if two sequential 
 		       begin // addresses are the same increase count_in by 1 and write nothing
-			  wren_a <= 1'b0; // unless count in is 524288, then write it
+			  wren_a <= 1'b0; 
 			  count_in <= count_in + 1'b1;
+			  addr_mem <= addr_2;
 		       end
 		     else if ((addr_3 == addr_1) && (addr_3 == addr)) // 1011 case of repeats
 		       begin
@@ -272,7 +282,8 @@ module drift
 		  begin
 		     fsm <= S_RUN;
 		     counter <= 6'b0;
-		     pipe_count <= 20'b0;	     
+		     pipe_count <= 20'b0;
+		     wren_a <= 1'b0;
 		  end
 		else
 		  begin
@@ -281,10 +292,11 @@ module drift
 		     if (counter > 1'b1) 
 		       begin
 			  if (q_b > L_HALF_RAM_DEPTH) //if bin is more than half full
-			    data_a <= q_b - L_HALF_RAM_DEPTH; // remove the half of ram max size
+			    data_a <= q_b - L_HALF_RAM_DEPTH; // remove the half ram max size
 			  else 
 			    data_a <= 20'b0; // else set it to zero
 			  addr_a <= counter-2'b10; // write to address what was 2 counts ago
+			  wren_a <= 1'b1;
 		       end
 		     addr_b <= counter[4:0];
 		  end
@@ -292,14 +304,18 @@ module drift
 	     
 	   S_PAUSE:
 	     begin
-	        if (pause)
-		begin
-		   fsm <= S_PAUSE;
-		   addr_a <= rdaddr;
-		   wren_a <= 1'b0;
-		end
-		else 
-		  fsm <= S_RUN;	
+	        if ((pause)||(filled))
+		  begin
+		     fsm <= S_PAUSE;
+		     addr_a <= rdaddr;
+		     wren_a <= 1'b0;
+		  end
+		else if (read_fin)
+		  fsm <= S_INIT_RAM;
+	  	else
+		  begin
+		     fsm <= S_RUN;
+		  end
 	     end // case: S_PAUSE
 	   
 	   default: fsm <= 4'b0100;
@@ -309,7 +325,8 @@ module drift
 
    // Combinational outputs
    assign wren_b = 1'b0; // never write to port B
-   assign filled = ((!rescale) && (q_b == L_RAM_DEPTH-1)); //RAM is full (no rescale)
-   
-     
+   assign filled_bin = ((!rescale) && (q_b == L_RAM_DEPTH-1)); //RAM is full (no rescale)
+   assign filled = (filled_ram == 1'b1);
+   assign count_in_out = count_in;
+   assign addr_count_in = addr_mem;
 endmodule
