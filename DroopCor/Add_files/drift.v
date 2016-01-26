@@ -17,7 +17,7 @@ module drift
    input 	 read_fin, // processor signals it finished reading out hist 
    input [4:0] 	 rdaddr, // readout adress
    input [13:0]  center_val, // input histogram central value
-   input [13:0]  adc, // data input from ADC
+   input [13:0]  adc, // data input from ADC	
    output [19:0] q_a, // readout data
    output [4:0]  addr_out,
    output [19:0] count_in_out,
@@ -39,7 +39,7 @@ module drift
    reg 		 filled_ram;		
    reg [4:0] 	 addr_a; // RAM address input port A
    reg [4:0] 	 addr_b; // RAM address input port B
-   reg [5:0] 	 temp_addr; // for truncation when caclulating addresses
+	reg[5:0] temp_addr; // for truncation when caclulating addresses
    reg [4:0] 	 addr; // first pipeline stage, address calculated from ADC
    reg [4:0] 	 addr_1; // second pipeline stage
    reg [4:0] 	 addr_2; // third pipeline stage
@@ -278,6 +278,7 @@ module drift
 		     remove_3 <= 1'b0;
 		     remove_4 <= 1'b0;
 		     remove_5 <= 1'b0;
+		     remove_6 <= 1'b0;		
 		  end
 	     end // case: S_RUN PIPELINE END
 	 
@@ -309,8 +310,8 @@ module drift
 	     
 	   S_PAUSE:
 	     begin
-	  //      if (((pause)||(filled)) && (!read_fin))| <-- changed for sim
-		if (pause && (!read_fin))
+      if (((pause)||(filled)) && (!read_fin))
+		//if (pause && (!read_fin))
 		  begin
 		     fsm <= S_PAUSE;
 		     addr_a <= rdaddr;
